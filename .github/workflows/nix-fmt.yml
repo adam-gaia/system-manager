@@ -2,15 +2,17 @@ name: nix-fmt
 
 on:
   pull_request:
+  merge_group:
   push:
     branches:
       - main
+      - "release-*"
 
 jobs:
   nix-fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: NixOS/nix-installer-action@main
         with:
           extra-conf: |

@@ -1,39 +1,43 @@
 {
   lib,
-  pkgs,
   config,
   ...
 }:
 {
-  options = {
-    # options coming from modules/services/system/nix-daemon.nix that we cannot import just yet because it
-    # depends on users. These are the minimum options we need to be able to configure Nix using system-manager.
-    nix = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = ''
-          Whether to enable Nix.
-          Disabling Nix makes the system hard to modify and the Nix programs and configuration will not be made available by NixOS itself.
-        '';
-      };
-      package = lib.mkOption {
-        type = lib.types.package;
-        default = pkgs.nix;
-        defaultText = lib.literalExpression "pkgs.nix";
-        description = ''
-          This option specifies the Nix package instance to use throughout the system.
-        '';
-      };
-    };
-  };
+  config = lib.mkMerge [
+    {
+      nix.enable = lib.mkDefault false;
 
-  config = lib.mkIf config.nix.enable {
+      # nix-channel is a NixOS-ism: on foreign distros the channels profile of
+      # root is not managed by us. Flake-based configs are the norm here, so we
+      # keep channels off unless the user explicitly asks for them.
+      nix.channel.enable = lib.mkDefault false;
 
-    environment.etc."nix/nix.conf".replaceExisting = true;
-    nix.settings.experimental-features = lib.mkDefault [
-      "nix-command"
-      "flakes"
-    ];
-  };
+      # Nix already owns its build users on the hosts we manage.
+      # Priority 900 overrides the upstream mkDefault, users can still set it.
+      nix.nrBuildUsers = lib.mkOverride 900 0;
+    }
+
+    (lib.mkIf config.nix.enable {
+      environment.etc."nix/nix.conf".replaceExisting = true;
+      environment.systemPackages = [ config.nix.package ];
+
+      # nix-flakes.nix always renders /etc/nix/registry.json, but we only want
+      # to take over a pre-existing registry when we have something to put in
+      # it. The original file is backed up and restored on deactivation.
+      environment.etc."nix/registry.json" = {
+        enable = config.nix.registry != { };
+        replaceExisting = true;
+      };
+
+      # nix-channel.nix sets NIX_PATH unconditionally. Exporting an empty value
+      # would shadow the default search path Nix uses, so unset it instead.
+      environment.sessionVariables.NIX_PATH = lib.mkIf (config.nix.nixPath == [ ]) (lib.mkForce null);
+
+      nix.settings.experimental-features = lib.mkDefault [
+        "nix-command"
+        "flakes"
+      ];
+    })
+  ];
 }

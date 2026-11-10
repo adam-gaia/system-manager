@@ -34,7 +34,7 @@
         system:
         import nixpkgs {
           inherit system;
-          overlays = [ packageOverlay ];
+          overlays = [ self.overlays.default ];
         }
       );
       eachSystem =
@@ -46,16 +46,17 @@
             pkgs = pkgsFor.${system};
           }
         );
-      packageOverlay = final: _prev: rec {
-        system-manager-unwrapped = final.callPackage ./package.nix { };
-        system-manager = final.callPackage ./nix/packages/wrapper.nix { inherit system-manager-unwrapped; };
-      };
     in
     {
-      lib = (import ./nix/lib.nix { inherit nixpkgs userborn; }) // {
-        # Container test library for external projects
-        containerTest = import ./lib/container-test-driver { inherit (nixpkgs) lib; };
-      };
+      lib =
+        (import ./nix/lib.nix {
+          inherit nixpkgs userborn;
+          inherit (nixpkgs) lib;
+        })
+        // {
+          # Container test library for external projects
+          containerTest = import ./lib/container-test-driver { inherit (nixpkgs) lib; };
+        };
 
       # Get overlayed packages in toplevel output
       packages = eachSystem (
@@ -69,7 +70,7 @@
       # Documentation outputs
       docs = eachSystem ({ pkgs, ... }: import ./docs/options.nix { inherit pkgs; });
 
-      overlays.default = packageOverlay;
+      overlays.default = import ./nix/overlays;
 
       # Only useful for quick tests
       systemConfigs.default = self.lib.makeSystemConfig {
